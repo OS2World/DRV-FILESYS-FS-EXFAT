@@ -1,0 +1,8 @@
+src/bin/
+src/bld/
+src/include/ver.h
+*.log
+*.err
+*.vdi
+*.vhd
+*.vdi.bak

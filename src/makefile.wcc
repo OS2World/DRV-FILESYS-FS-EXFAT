@@ -1,0 +1,7 @@
+ROOT = .
+PROJ = .
+PATH = ..
+
+!include makefile.mk
+
+DIRS = include ufat32 ifs$(%SEP)libc ifs
