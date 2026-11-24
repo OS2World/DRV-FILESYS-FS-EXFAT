@@ -1,4 +1,4 @@
-# EXFAT.IFS 0.1a1 - user guide
+# EXFAT.IFS 0.1a2 - user guide
 
 EXFAT.IFS lets OS/2 and ArcaOS use exFAT volumes (SDXC cards, USB sticks and external disks formatted as exFAT,
 files over 4 GB). It mounts **only exFAT**. FAT12/FAT16/FAT32 volumes are left to the normal FAT32.IFS, and the two

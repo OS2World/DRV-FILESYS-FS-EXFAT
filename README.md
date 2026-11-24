@@ -10,9 +10,9 @@ without exFAT support (as Arca Noae distributes it), or on its own.
 
 | Field | Details |
 |---|---|
-| Version | 0.1a1 (first alpha), based on the netlabs FAT32 trunk at SVN revision 384 |
+| Version | 0.1a2 (second alpha), based on the netlabs FAT32 trunk at SVN revision 384 |
 | Status | Loads on ArcaOS 5.1.2 (VM), formats and mounts exFAT volumes; directories, long names, copy, rename, delete, a 76 MB file and 900 files in one directory verified by MD5, CHKDSK and a host-side structure check; Windows 11 reads our volume and our driver reads what Windows wrote. Directories created by Windows (contiguous) can grow. Not tested: real hardware, Linux, files over 2 GB. |
-| Tested on | ArcaOS 5.1.2 virtual machine (VirtualBox, 512 MB virtual disk), 2026-11-23. No real hardware. |
+| Tested on | ArcaOS 5.1.2 virtual machine (VirtualBox): 512 MB virtual disk (0.1a1, 2026-11-23) and an exFAT USB stick written by Windows (0.1a2, 2026-11-24). No real hardware. |
 | License | GNU Lesser General Public License 2.1, see [LICENSE](LICENSE) (the LGPL covers the copyright, not the exFAT patents); parts under other GPL-compatible licences are listed in `src\doc\license.txt` |
 | Authors | Henk Kelder (original FAT32.IFS, 2002 copyright given to netlabs.org), Brian Smith, KO Myung-Hun, Alfredo Fernandez Diaz, David Graser, Lars Erdmann, Valery V. Sedletski (exFAT support, FAT32.IFS 0.10); OS2World (EXFATONLY build) |
 | Original source | https://svn.netlabs.org/repos/fat32/trunk (SVN revision 384) |

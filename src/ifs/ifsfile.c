@@ -3497,6 +3497,22 @@ ULONGLONG size;
 
       if (ulClustersNeeded > ulClusterCount)
          {
+#ifdef EXFAT
+         /*
+            A file made by another system (Windows) is contiguous and has no FAT chain (NoFatChain flag).
+            New clusters are taken from anywhere and linked through the FAT, which such a file does not use:
+            the write stopped short at the end of the last cluster. Write the FAT chain of the clusters the
+            file has and clear the flag first; the directory entry is updated with the new size.
+         */
+         if (pVolInfo->bFatType == FAT_TYPE_EXFAT && (pOpenInfo->pSHInfo->fNoFatChain & 1))
+            {
+            ULONG ulC;
+            for (ulC = pOpenInfo->pSHInfo->ulStartCluster; ulC < ulCluster; ulC++)
+               SetNextCluster(pVolInfo, ulC, ulC + 1);
+            SetNextCluster(pVolInfo, ulCluster, pVolInfo->ulFatEof);
+            pOpenInfo->pSHInfo->fNoFatChain = 0;
+            }
+#endif
          ulNextCluster = MakeFatChain(pVolInfo, pOpenInfo->pSHInfo, ulCluster, ulClustersNeeded - ulClusterCount, &pOpenInfo->pSHInfo->ulLastCluster);
          if (ulNextCluster == pVolInfo->ulFatEof)
             return ERROR_DISK_FULL;

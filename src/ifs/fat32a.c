@@ -1376,6 +1376,11 @@ POPENINFO pOpenInfo;
             rc = ERROR_ALREADY_SHUTDOWN;
             goto FS_FSCTLEXIT;
             }
+         if (cbParm < sizeof (ULONG))      /* EXFATONLY: a missing parameter buffer trapped at ring 0 */
+            {
+            rc = ERROR_INSUFFICIENT_BUFFER;
+            goto FS_FSCTLEXIT;
+            }
          rc = GetLogBuffer(pData, cbData, *(PULONG)pParm);
          break;
 
@@ -1434,7 +1439,7 @@ POPENINFO pOpenInfo;
          break;
 
       case FAT32_SETPARMS:
-         if (cbParm > sizeof (F32PARMS))
+         if (cbParm < sizeof (F32PARMS))     /* EXFATONLY: was '>', which let an empty parameter buffer through */
             {
             rc = ERROR_INSUFFICIENT_BUFFER;
             goto FS_FSCTLEXIT;
@@ -1488,6 +1493,11 @@ POPENINFO pOpenInfo;
          break;
 
       case FAT32_WIN2OS:
+         if (cbParm < sizeof (USHORT) || !cbData)   /* EXFATONLY: missing buffers */
+            {
+            rc = ERROR_INSUFFICIENT_BUFFER;
+            goto FS_FSCTLEXIT;
+            }
          Translate2OS2((PUSHORT)pParm, pData, cbData);
          rc = 0;
          break;
@@ -1499,6 +1509,12 @@ POPENINFO pOpenInfo;
          PVOLINFO pVolInfo = pGlobVolInfo;
          BYTE     bDrive;
 
+         if (!cbParm || !cbData)             /* EXFATONLY: missing buffers */
+            {
+            free(szShortPath);
+            rc = ERROR_INVALID_PARAMETER;
+            goto FS_FSCTLEXIT;
+            }
          bDrive = *pParm;
          if (bDrive >= 'a' && bDrive <= 'z')
             bDrive -= ('a' - 'A');
@@ -1508,6 +1524,12 @@ POPENINFO pOpenInfo;
             if (pVolInfo->bDrive == bDrive)
                break;
             pVolInfo = (PVOLINFO)pVolInfo->pNextVolInfo;
+            }
+         if (!pVolInfo)                      /* EXFATONLY: the drive is not one of ours */
+            {
+            free(szShortPath);
+            rc = ERROR_INVALID_DRIVE;
+            goto FS_FSCTLEXIT;
             }
          if (pVolInfo->fFormatInProgress)
             {
@@ -1580,6 +1602,12 @@ POPENINFO pOpenInfo;
             } Data;
 
          Data far *pData2 = (Data far *)pData;
+
+         if (cbData < 2)                     /* EXFATONLY: missing data buffer */
+            {
+            rc = ERROR_BUFFER_OVERFLOW;
+            goto FS_FSCTLEXIT;
+            }
 
          while (pVolInfo2)
             {
@@ -1664,7 +1692,14 @@ POPENINFO pOpenInfo;
 
       case FAT32_GETVOLLABEL:
          {
-         PVOLINFO pVolInfo = GetVolInfoX(pParm);
+         PVOLINFO pVolInfo;
+
+         if (!cbParm)                        /* EXFATONLY: missing drive letter */
+            {
+            rc = ERROR_INVALID_PARAMETER;
+            goto FS_FSCTLEXIT;
+            }
+         pVolInfo = GetVolInfoX(pParm);
 
          if (! pVolInfo)
             {
@@ -1685,7 +1720,14 @@ POPENINFO pOpenInfo;
 
       case FAT32_GETALLOC:
          {
-         PVOLINFO pVolInfo = GetVolInfoX(pParm);
+         PVOLINFO pVolInfo;
+
+         if (!cbParm)                        /* EXFATONLY: missing drive letter */
+            {
+            rc = ERROR_INVALID_PARAMETER;
+            goto FS_FSCTLEXIT;
+            }
+         pVolInfo = GetVolInfoX(pParm);
 
          if (! pVolInfo)
             {
@@ -1706,7 +1748,14 @@ POPENINFO pOpenInfo;
 
       case FAT32_SETVOLLABEL:
          {
-         PVOLINFO pVolInfo = GetVolInfoX(pParm);
+         PVOLINFO pVolInfo;
+
+         if (!cbParm)                        /* EXFATONLY: missing drive letter */
+            {
+            rc = ERROR_INVALID_PARAMETER;
+            goto FS_FSCTLEXIT;
+            }
+         pVolInfo = GetVolInfoX(pParm);
 
          if (! pVolInfo)
             {
