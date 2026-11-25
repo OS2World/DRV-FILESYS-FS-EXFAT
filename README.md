@@ -89,6 +89,7 @@ are described in `src\doc\fat32.txt`. Failure message form: `EXFAT: EXFAT.IFS co
   and 4 GB on the same system. So a file bigger than 4 GB could not be addressed correctly here; the driver refuses to create
   one (error 87, invalid parameter). Going further would need a 32-bit file system driver; see `doc\CHANGES.md` (0.1a3).
   **0.1a2 with `/largefiles` could create files over 4 GB; do not rely on files over 4 GB written by 0.1a2.**
+  A 32-bit entry point was tried (see `doc\CHANGES.md`, "Investigated after 0.1a3"): the kernel then needs the whole 32-bit I/O set (`FS32_READ`, `FS32_WRITE`), so a 4 GB+ driver means a 32-bit core, not a patch. Not done.
 * **The disk needs a partition table.** A disk with no partition table (the exFAT boot sector in the very first sector, as
   some cameras and consoles make) is not offered to the driver by the ArcaOS USB stack; it stays "unknown". Format the stick
   with a partition (Windows Explorer does not; Disk Management, or `diskpart` with `create partition primary`, does).

@@ -1,3 +1,12 @@
+# Investigated after 0.1a3 (2026-11-24, not released)
+
+Can the 16-bit driver seek past 4 GB by adding 32-bit entry points? Tried in a scratch copy, ArcaOS kernel 14.204 SMP, VM only.
+
+* Exporting `FS32_ATTRIBUTE` (same value as `FS_ATTRIBUTE`) makes the kernel use the 32-bit entry points. `DosSetFilePtrL` then reaches `FS32_CHGFILEPTRL` with a 64-bit offset and flat pointers; a native 32-bit routine that updates `sfi_position`, `sfi_positionl` (open-file structure offsets 22 and 50) works.
+* But the kernel then also calls `FS32_READ` / `FS32_WRITE` for all file I/O. With those not exported it jumps to address 0 (trap 000e in module LSWITCH, EIP 0168:00000000).
+* So the 32-bit interface is all-or-nothing. It needs `FS32_READ` / `FS32_WRITE` (probably also `FS32_READFILEATCACHE` / `FS32_RETURNFILECACHE`) as 32-to-16 thunks (`KernThunkStackTo16`, flat pointers mapped to selectors with `DevHlp LinToGDTSelector`), or a native 32-bit core. Arca Noae's FAT32 (the same code base) stops at stubs that return "not supported" and leaves `FS32_ATTRIBUTE` commented out.
+* Decision: not done. Files stay limited to 2 GB - 1 (4 GB - 1 with `/largefiles`).
+
 # Release 0.1a3 (2026-11-24)
 
 File size limits made safe and correct (found by the first large-file tests), plus test programs. Tested in an ArcaOS 5.1.2 virtual
