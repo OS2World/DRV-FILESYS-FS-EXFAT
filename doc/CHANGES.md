@@ -1,3 +1,29 @@
+# Release 0.1a3 (2026-11-24)
+
+File size limits made safe and correct (found by the first large-file tests), plus test programs. Tested in an ArcaOS 5.1.2 virtual
+machine (kernel 14.204 SMP) with exFAT partitions of 20 GB and 57 GB on a USB stick. Not tested on real hardware.
+
+* **A 16-bit file system driver cannot seek past 4 GB on this kernel.** With `/largefiles`, 0.1a2 let an exFAT file grow past 4 GB, but a seek
+  into such a file went to the wrong place. The driver trace (`test\fslog.c`) shows why: `DosSetFilePtrL` reaches the driver through the old
+  32-bit `FS_CHGFILEPTR`, never through `FS_CHGFILEPTRL`, and the kernel passes only 32 bits of the offset (2 GB - 4 GB arrive as an unsigned number,
+  4 GB and above lose their top bits; `DosSetFileSizeL` does arrive as `FS_NEWSIZEL` with 64 bits). The same test (`test\bigtest.c`) passes on JFS,
+  a 32-bit driver, on the same system, so the kernel and the test are fine. Setting the large-file attribute earlier (at load time, not in
+  `FS_INIT`) changed nothing. Going beyond 4 GB would need a 32-bit file system driver (the kernel's 32-bit interface passes 64-bit offsets); that is not done.
+* **New limit: 2 GB - 1 by default, 4 GB - 1 with `/largefiles`, for exFAT too** (`MAXFILESIZE` in `src\ifs\ifsfile.c`). `FS_NEWSIZEL`, `FS_WRITE` and the initial allocation of
+  `FS_OPENCREATE` refuse to go past it (error 87); the upstream FAT32 code exempted exFAT from the 4 GB test. Test `test\captest.c`: writes stop at 4,294,963,903 bytes.
+* **Seeks between 2 GB and 4 GB work.** `FS_CHGFILEPTR` (the entry point the kernel uses) took the 32-bit offset as signed, so an absolute seek to 2 GB - 4 GB failed with
+  "negative seek" (error 131). With `/largefiles` an absolute offset is now read as unsigned. `FS_CHGFILEPTRL` stored the new position cut to 32 bits (`(ULONG)llNewOffset`, a FAT32 leftover);
+  it now keeps 64 bits, and the 32-bit copies of the file size and position in the open-file structure are clamped to 4 GB - 1 instead of wrapping around (a 5 GB file looked 947,912,704 bytes long).
+  Result (3,500 MB file): seeks from the start, from the end and relative, and markers across 2 GB read back correctly; a 5,000 MB file is refused. Regression: the nine save patterns,
+  growth of a driver-made file, free space before and after, and CHKDSK were unchanged and clean.
+* Test programs added: `test\bigtest.c` (sizes, seeks and markers for big files), `test\captest.c` (the cap), `test\fslog.c` (switch the IFS trace on and read it; the safe way to call the private `DosFSCtl` functions),
+  `test\bsec.c` (read a drive's boot sector or MBR), `test\psk.c` (list and kill processes by name or number on the test VM).
+* Found, documented, not fixed: **a disk without a partition table is not offered to the driver** by the ArcaOS USB stack (the volume stays "unknown"; no `FS_MOUNT` call arrives). Windows Explorer formats
+  such a stick without creating a partition table; `diskpart` with `create partition primary` does. A FAT32 (type 0C) partition on the same stick was not mapped either (not investigated).
+  **`CHKDSK` (`exfatchk`) can report 0 free clusters** on a volume whose FAT holds a pre-filled chain for free clusters (a 57 GB stick formatted by another device); it trusts the FAT over the allocation bitmap. The driver counts from the bitmap and is not affected.
+  `FORMAT` prints "The new type of file system is FAT32" for an exFAT volume (message text only).
+* Not changed: the large-file default stays off. `DosSetFileSizeL` does not clear the added area (OS/2 does not promise zeros), as before.
+
 # Release 0.1a2 (2026-11-24)
 
 Two fixes (below) and test programs.

@@ -1,11 +1,11 @@
-# EXFAT.IFS 0.1a2 - user guide
+# EXFAT.IFS 0.1a3 - user guide
 
 EXFAT.IFS lets OS/2 and ArcaOS use exFAT volumes (SDXC cards, USB sticks and external disks formatted as exFAT,
 files over 4 GB). It mounts **only exFAT**. FAT12/FAT16/FAT32 volumes are left to the normal FAT32.IFS, and the two
 drivers can be installed together.
 
 > **Alpha.** Tested on ArcaOS 5.1.2 in a VirtualBox virtual machine, with a 512 MB virtual disk, and by exchanging the
-> disk with Windows 11 in both directions. **Not tested on real hardware, with Linux, with files over 2 GB, or as a
+> disk with Windows 11 in both directions. **Not tested on real hardware, with Linux, or as a
 > swap or boot volume.** Keep a copy of `CONFIG.SYS` and a way to edit it at boot. Do not use it on data you cannot lose.
 
 > **Legal note.** exFAT is a Microsoft file system and is covered by Microsoft patents. This is why Arca Noae ships
@@ -58,11 +58,19 @@ warnings), every line starts with `EXFAT: `, failures read `EXFAT: EXFAT.IFS cou
 | `/h` | put the cache in high memory |
 | `/rasectors:<n>` | read-ahead sectors |
 | `/eas`, `/eas2` | extended attribute handling (see `src\doc\fat32.txt`) |
-| `/largefiles` | support for files over 2 GB |
+| `/largefiles` | largest file 4 GB - 1 instead of 2 GB - 1 (see Limits) |
 | `/monitor` | trace to the OS/2 trace buffer (diagnostics) |
 | `/autocheck:<drives>` | check these drives at boot |
 
 The full description of the shared options is in the upstream manual `src\doc\fat32.txt` (written for FAT32.IFS).
+
+## Limits
+
+* **File size: 2 GB - 1, or 4 GB - 1 with `/largefiles`.** The OS/2 kernel gives a 16-bit file system driver only 32-bit seek
+  offsets, whatever the file system allows (exFAT: 16 EB). The driver therefore refuses to create or grow a file past the limit
+  (error 87, "invalid parameter"). A 32-bit driver would be needed for more. Details: `CHANGES.md`, release 0.1a3.
+* **A partition table is required.** A removable disk without one (the exFAT boot sector in sector 0) is not offered to the driver.
+  Use Disk Management or `diskpart` (`create partition primary`) in Windows; Explorer's "Format" keeps a disk partition-less.
 
 ## What is different from FAT32.IFS
 
@@ -75,8 +83,8 @@ The full description of the shared options is in the upstream manual `src\doc\fa
 
 ## Known issues
 
-* Alpha: tested only in a virtual machine and with Windows 11. Not tested with real cards or readers, Linux, files over
-  2 GB, or as swap/boot volume.
+* Alpha: tested only in a virtual machine and with Windows 11. Not tested with real cards or readers, Linux, or as
+  swap/boot volume. Files up to 3.5 GB were tested.
 * An insert that fails halfway (for example disk full) can leave a dangling directory entry or unreleased clusters
   (upstream behaviour).
 * Messages of `FORMAT` and `CHKDSK` come from the OS/2 message file and speak of the "FAT" file system in general.

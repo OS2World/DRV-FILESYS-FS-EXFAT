@@ -20,6 +20,17 @@ PRIVATE volatile PSHOPENINFO pGlobSH = NULL;
 PRIVATE VOID ResetAllCurrents(PVOLINFO pVolInfo, POPENINFO pOI);
 
 ULONG PositionToOffset(PVOLINFO pVolInfo, POPENINFO pOpenInfo, LONGLONG llOffset);
+
+/* The 32-bit size/position fields of the SFT are only a compatibility copy for programs that use the old API; the
+   64-bit sfi_sizel/sfi_positionl are the real values. Clamp the copy instead of letting it wrap around (a 5 GB file
+   was seen as 947912704 bytes long, and a position above 2 GB as negative). */
+#define SFI_POS32(p)   ((ULONG)((p) > (LONGLONG)ULONG_MAX ? (LONGLONG)ULONG_MAX : (p)))   /* unsigned: positions of 2 GB - 4 GB are valid */
+#define SFI_SIZE32(s)  ((ULONG)((s) > (ULONGLONG)ULONG_MAX ? (ULONGLONG)ULONG_MAX : (s)))
+
+/* Largest file this driver lets exist: 2 GB - 1 as it is, 4 GB - 1 with /largefiles. A 16-bit file system driver gets
+   only 32-bit seek offsets from the OS/2 kernel (DosSetFilePtrL arrives in FS_CHGFILEPTR, never in FS_CHGFILEPTRL; see
+   doc\CHANGES.md), so a bigger file could not be addressed correctly. exFAT itself allows much larger files. */
+#define MAXFILESIZE()  (f32Parms.fLargeFiles ? (ULONGLONG)ULONG_MAX : (ULONGLONG)LONG_MAX)
 PRIVATE USHORT NewSize(PVOLINFO pVolInfo,
     struct sffsi far * psffsi,      /* psffsi   */
     struct sffsd far * psffsd,      /* psffsd   */
@@ -64,6 +75,8 @@ USHORT rc;
 
    if (f32Parms.fLargeFiles)
       size = psffsi->sfi_sizel;
+   if (size > MAXFILESIZE())        /* initial allocation request beyond what this driver can address */
+      size = MAXFILESIZE();
 #else
    AssignUL(&size, psffsi->sfi_size);
 
@@ -1852,8 +1865,8 @@ ULONGLONG size;
 
 FS_READEXIT:
 #ifdef INCL_LONGLONG
-   psffsi->sfi_size = (ULONG)size;
-   psffsi->sfi_position = (LONG)pos;
+   psffsi->sfi_size = SFI_SIZE32(size);
+   psffsi->sfi_position = SFI_POS32(pos);
 
    if (f32Parms.fLargeFiles)
       {
@@ -2169,7 +2182,7 @@ ULONGLONG size;
 #ifdef INCL_LONGLONG
         if ( (! f32Parms.fLargeFiles && (pos + usBytesToWrite >= (LONGLONG)LONG_MAX   ||
                                         size + usBytesToWrite >= (LONGLONG)LONG_MAX)) ||
-             (f32Parms.fLargeFiles && !f32Parms.fFatPlus && (pos + usBytesToWrite >= (LONGLONG)ULONG_MAX  ||
+             (f32Parms.fLargeFiles && (!f32Parms.fFatPlus || pVolInfo->bFatType == FAT_TYPE_EXFAT) && (pos + usBytesToWrite >= (LONGLONG)ULONG_MAX  ||
                                         size + usBytesToWrite >= (LONGLONG)ULONG_MAX) &&
 #else
         LONGLONG llPos, llSize;
@@ -2182,11 +2195,7 @@ ULONGLONG size;
              (f32Parms.fLargeFiles && !f32Parms.fFatPlus && (iGreaterEUL(llPos, ULONG_MAX)  ||
                                         iGreaterEUL(llSize, ULONG_MAX)) &&
 #endif
-#ifdef EXFAT
-             (pVolInfo->bFatType < FAT_TYPE_EXFAT)) )
-#else
-             TRUE) )
-#endif
+             TRUE) )      /* 0.1a3: exFAT is capped as well (the kernel gives a 16-bit driver 32-bit positions only) */
         {
             rc = ERROR_INVALID_PARAMETER;
             goto FS_WRITEEXIT;
@@ -2206,7 +2215,7 @@ ULONGLONG size;
            usBytesToWrite = (USHORT)((LONGLONG)LONG_MAX - pos);
 
 #ifdef EXFAT
-        if (f32Parms.fLargeFiles && !f32Parms.fFatPlus && (pVolInfo->bFatType < FAT_TYPE_EXFAT) &&
+        if (f32Parms.fLargeFiles && (!f32Parms.fFatPlus || pVolInfo->bFatType == FAT_TYPE_EXFAT) &&
             (LONGLONG)ULONG_MAX - pos < (LONGLONG)usBytesToWrite)
 #else
         if (f32Parms.fLargeFiles && !f32Parms.fFatPlus &&
@@ -2653,8 +2662,8 @@ ULONGLONG size;
 
 FS_WRITEEXIT:
 #ifdef INCL_LONGLONG
-   psffsi->sfi_size = (ULONG)size;
-   psffsi->sfi_position = (LONG)pos;
+   psffsi->sfi_size = SFI_SIZE32(size);
+   psffsi->sfi_position = SFI_POS32(pos);
 
    if (f32Parms.fLargeFiles)
       {
@@ -2847,9 +2856,9 @@ USHORT rc;
       }
 
 #ifdef INCL_LONGLONG
-   if (pos != (ULONG)llNewOffset)
+   if (pos != llNewOffset)          /* EXFATONLY: was cast to ULONG, which cut every seek to 32 bits */
       {
-      pos = (ULONG)llNewOffset;
+      pos = llNewOffset;
       pOpenInfo->ulCurCluster = pVolInfo->ulFatEof;
       }
 #else
@@ -2863,8 +2872,8 @@ USHORT rc;
 
 FS_CHGFILEPTRLEXIT:
 #ifdef INCL_LONGLONG
-   psffsi->sfi_size = (ULONG)size;
-   psffsi->sfi_position = (LONG)pos;
+   psffsi->sfi_size = SFI_SIZE32(size);
+   psffsi->sfi_position = SFI_POS32(pos);
 
    if (f32Parms.fLargeFiles)
       {
@@ -2908,7 +2917,12 @@ int far pascal _loadds FS_CHGFILEPTR(
    LONGLONG llOffset;
 
 #ifdef INCL_LONGLONG
-   llOffset = (LONGLONG)lOffset;
+   /* With large file support the kernel gives an absolute offset as an unsigned 32-bit number (2 GB - 4 GB arrive with
+      the top bit set); relative offsets stay signed. */
+   if (f32Parms.fLargeFiles && usType == CFP_RELBEGIN)
+      llOffset = (LONGLONG)(ULONG)lOffset;
+   else
+      llOffset = (LONGLONG)lOffset;
 
    pos = (LONGLONG)psffsi->sfi_position;
 
@@ -3356,6 +3370,9 @@ ULONGLONG size;
    if (f32Parms.fLargeFiles)
       size = psffsi->sfi_sizel;
 
+   if (ullLen > MAXFILESIZE())      /* see MAXFILESIZE: a bigger file could not be addressed through the 32-bit seek interface */
+      return ERROR_INVALID_PARAMETER;
+
    if (ullLen == size)
       return 0;
 
@@ -3384,7 +3401,7 @@ ULONGLONG size;
       ResetAllCurrents(pVolInfo, pOpenInfo);
 
 #ifdef INCL_LONGLONG
-      psffsi->sfi_size = (ULONG)ullLen;
+      psffsi->sfi_size = SFI_SIZE32(ullLen);
 
       if (f32Parms.fLargeFiles)
          psffsi->sfi_sizel = ullLen;
@@ -3520,7 +3537,7 @@ ULONGLONG size;
       }
 
 #ifdef INCL_LONGLONG
-   psffsi->sfi_size = (ULONG)ullLen;
+   psffsi->sfi_size = SFI_SIZE32(ullLen);
 
    if (f32Parms.fLargeFiles)
       psffsi->sfi_sizel = ullLen;

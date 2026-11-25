@@ -10,9 +10,9 @@ without exFAT support (as Arca Noae distributes it), or on its own.
 
 | Field | Details |
 |---|---|
-| Version | 0.1a2 (second alpha), based on the netlabs FAT32 trunk at SVN revision 384 |
+| Version | 0.1a3 (third alpha), based on the netlabs FAT32 trunk at SVN revision 384 |
 | Status | Loads on ArcaOS 5.1.2 (VM), formats and mounts exFAT volumes; directories, long names, copy, rename, delete, a 76 MB file and 900 files in one directory verified by MD5, CHKDSK and a host-side structure check; Windows 11 reads our volume and our driver reads what Windows wrote. Directories created by Windows (contiguous) can grow. Not tested: real hardware, Linux, files over 2 GB. |
-| Tested on | ArcaOS 5.1.2 virtual machine (VirtualBox): 512 MB virtual disk (0.1a1, 2026-11-23) and an exFAT USB stick written by Windows (0.1a2, 2026-11-24). No real hardware. |
+| Tested on | ArcaOS 5.1.2 virtual machine (VirtualBox): 512 MB virtual disk (0.1a1, 2026-11-23) and exFAT USB sticks written by Windows (0.1a2 and 0.1a3, 2026-11-24; 0.1a3: 20 GB and 57 GB partitions, files up to 3.5 GB). No real hardware. |
 | License | GNU Lesser General Public License 2.1, see [LICENSE](LICENSE) (the LGPL covers the copyright, not the exFAT patents); parts under other GPL-compatible licences are listed in `src\doc\license.txt` |
 | Authors | Henk Kelder (original FAT32.IFS, 2002 copyright given to netlabs.org), Brian Smith, KO Myung-Hun, Alfredo Fernandez Diaz, David Graser, Lars Erdmann, Valery V. Sedletski (exFAT support, FAT32.IFS 0.10); OS2World (EXFATONLY build) |
 | Original source | https://svn.netlabs.org/repos/fat32/trunk (SVN revision 384) |
@@ -76,13 +76,29 @@ is `os2`; `compile_wat.cmd` sets `OS=owbuild` to skip those steps.
 | `/w` | wait for a key after the messages |
 | `/aa` | beep when the driver loaded |
 | `/exfat:<drives>` | restrict the mounted drive letters (`/exfat:efg`, `/exfat:*`, `/exfat:-ab` excludes) |
+| `/largefiles` | raise the largest file from 2 GB - 1 to 4 GB - 1 (see Limits below) |
 
-The other upstream switches (`/cache:`, `/rasectors:`, `/eas`, `/largefiles`, `/monitor`, `/autocheck:` ...)
+The other upstream switches (`/cache:`, `/rasectors:`, `/eas`, `/monitor`, `/autocheck:` ...)
 are described in `src\doc\fat32.txt`. Failure message form: `EXFAT: EXFAT.IFS could not be loaded. <reason>`.
+
+## Limits (please read)
+
+* **File size: 2 GB - 1 by default, 4 GB - 1 with `/largefiles`.** exFAT itself allows far bigger files, but the OS/2 kernel
+  (tested on ArcaOS 14.204) hands a 16-bit file system driver only **32-bit seek offsets**: `DosSetFilePtrL` reaches the driver
+  through the old 32-bit entry point, and offsets above 4 GB lose their top bits. JFS, a 32-bit driver, seeks correctly past 2 GB
+  and 4 GB on the same system. So a file bigger than 4 GB could not be addressed correctly here; the driver refuses to create
+  one (error 87, invalid parameter). Going further would need a 32-bit file system driver; see `doc\CHANGES.md` (0.1a3).
+  **0.1a2 with `/largefiles` could create files over 4 GB; do not rely on files over 4 GB written by 0.1a2.**
+* **The disk needs a partition table.** A disk with no partition table (the exFAT boot sector in the very first sector, as
+  some cameras and consoles make) is not offered to the driver by the ArcaOS USB stack; it stays "unknown". Format the stick
+  with a partition (Windows Explorer does not; Disk Management, or `diskpart` with `create partition primary`, does).
 
 ## Known issues / open points
 
-* Tested on a virtual disk, and with Windows 11 mounting the volume (both directions). Not tested with Linux, real hardware or files over 2 GB.
+* Tested on virtual disks and USB sticks in a VM, and with Windows 11 mounting the volume (both directions). Not tested with Linux or real hardware. Files up to 3.5 GB were tested.
+* `CHKDSK` (`exfatchk`) can report 0 free clusters on a volume whose FAT holds stale chains for free clusters (seen on a stick formatted by another device); the driver counts free space from the bitmap and is not affected. Not fixed.
+* `FORMAT` says "The new type of file system is FAT32" although it makes an exFAT volume (wrong message text only).
+* `DosSetFileSizeL` does not clear the added area; it holds old disk data until written (OS/2 does not promise zeros).
 * An insert that fails halfway (disk full) can leave a dangling directory entry or unreleased clusters (upstream behaviour).
 * **Headers:** the upstream tree contained IBM DDK-derived headers. Files with explicit IBM/Microsoft notices
   and the IBM IFS reference were removed, and the seven headers the IFS needs were replaced by clean-room

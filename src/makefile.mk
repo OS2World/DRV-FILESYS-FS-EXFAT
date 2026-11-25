@@ -1,5 +1,5 @@
 _VENDOR=OS2World
-_VER=0.1a2
+_VER=0.1a3
 _VERSION=$(_VER)
 FILEVER=@$#$(_VENDOR):$(_VERSION)$#@$#$#1$#$# $(%PROJSTR)::::0::@@
 
